@@ -1,0 +1,8 @@
+{
+	"name": "turboflare-complex-fixture",
+	"private": true,
+	"packageManager": "pnpm@11.5.0",
+	"scripts": {
+		"build": "turbo run build"
+	}
+}

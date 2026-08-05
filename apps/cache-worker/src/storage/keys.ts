@@ -1,0 +1,71 @@
+import { ErrorCode, errorResponse } from "../http/response";
+import { utf8ByteLength } from "../shared/bytes";
+import type { TenantContext } from "../tenancy/types";
+import { ARTIFACT_NAMESPACE_VERSION, MAX_R2_KEY_BYTES } from "./constants";
+
+export interface ArtifactKeySet {
+  fallbackKey: string | null;
+  key: string;
+}
+
+export function artifactKeySet(
+  tenant: TenantContext,
+  artifactId: string,
+): ArtifactKeySet | Response {
+  const key = artifactKey(tenant, artifactId);
+  if (key instanceof Response) {
+    return key;
+  }
+
+  const fallbackKey = fallbackArtifactKey(tenant, artifactId);
+  if (fallbackKey instanceof Response) {
+    return fallbackKey;
+  }
+
+  return { fallbackKey, key };
+}
+
+export function artifactKey(tenant: TenantContext, artifactId: string): string | Response {
+  const key = artifactKeyForBranch(tenant, artifactId, tenant.branch);
+  if (utf8ByteLength(key) > MAX_R2_KEY_BYTES) {
+    return errorResponse(400, ErrorCode.BadRequest, "Artifact key is too long");
+  }
+
+  return key;
+}
+
+export function fallbackArtifactKey(
+  tenant: TenantContext,
+  artifactId: string,
+): string | Response | null {
+  if (tenant.fallbackBranch === undefined) {
+    return null;
+  }
+
+  const key = artifactKeyForBranch(
+    tenant,
+    artifactId,
+    tenant.fallbackBranch.length === 0 ? undefined : tenant.fallbackBranch,
+  );
+  if (utf8ByteLength(key) > MAX_R2_KEY_BYTES) {
+    return errorResponse(400, ErrorCode.BadRequest, "Artifact key is too long");
+  }
+
+  return key;
+}
+
+export function teamKeyPrefix(team: string): string {
+  return `${ARTIFACT_NAMESPACE_VERSION}/team/${encodeURIComponent(team)}/`;
+}
+
+function artifactKeyForBranch(
+  tenant: TenantContext,
+  artifactId: string,
+  branch: string | undefined,
+): string {
+  const teamPrefix = teamKeyPrefix(tenant.key);
+  const artifactPart = `artifact/${encodeURIComponent(artifactId)}`;
+  return branch === undefined
+    ? `${teamPrefix}${artifactPart}`
+    : `${teamPrefix}branch/${encodeURIComponent(branch)}/${artifactPart}`;
+}
